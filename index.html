@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detector de Calor - Panel de Monitoreo</title>
+    <!-- Carga de Tailwind CSS --><script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Fondo oscuro tipo dashboard */
+        }
+        .led-glow {
+            filter: drop-shadow(0 0 4px currentColor) drop_shadow(0 0 10px currentColor); /* Resplandor ajustado para LEDs más pequeños */
+            transition: all 0.3s ease-in-out;
+        }
+        /* Estilos específicos para la estética del dashboard */
+        .dashboard-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+        }
+        .range-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 10px;
+            background: #30363d;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+            border-radius: 5px;
+        }
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #58a6ff;
+            cursor: pointer;
+            box-shadow: 0 0 5px #58a6ff;
+        }
+        .range-slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #58a6ff;
+            cursor: pointer;
+            box-shadow: 0 0 5px #58a6ff;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="app" class="w-full max-w-lg p-6 rounded-xl dashboard-card text-gray-200">
+        <h1 class="text-3xl font-bold text-center mb-6 text-blue-400">
+            Monitor de Calor de Protoboard
+        </h1>
+
+        <!-- Sección de Lectura de Temperatura --><div class="mb-8 p-4 bg-gray-700/30 rounded-lg">
+            <label for="temp-input" class="block text-lg font-medium mb-2">
+                Simulación de Salida (Temperatura en °C):
+            </label>
+            <input type="range" id="temp-input" min="20" max="100" value="25" class="range-slider w-full mb-3" oninput="updateDashboard(this.value)">
+            <p class="text-4xl font-extrabold text-center">
+                <span id="current-temp" class="text-yellow-400">25.0</span>°C
+            </p>
+            <p id="temp-status" class="text-center text-green-400 mt-2 text-xl font-semibold">
+                Estado: Normal
+            </p>
+        </div>
+
+        <!-- Sección de LEDs Virtuales (Ahora más pequeños con texto visible) --><div class="flex justify-around items-center mb-8 p-4 bg-gray-700/30 rounded-lg">
+            
+            <!-- LED 1: Verde (Normal) -->
+            <div class="text-center">
+                <!-- SVG ajustado: mayor altura para el texto, círculo subido, font-size a 20 -->
+                <svg width="80" height="70" viewBox="0 0 100 100" class="mx-auto">
+                    <circle id="led-green" cx="50" cy="35" r="30" fill="#10b981" class="led-glow" style="color: #10b981;"></circle>
+                    <text x="50" y="80" text-anchor="middle" fill="#10b981" font-size="20">NORMAL</text>
+                </svg>
+            </div>
+
+            <!-- Separador (Aumentado a h-16 para que coincida con el nuevo alto del SVG) -->
+            <div class="w-px h-16 bg-gray-600"></div>
+
+            <!-- LED 2: Rojo (Alerta) -->
+            <div class="text-center">
+                <!-- SVG ajustado: mayor altura para el texto, círculo subido, font-size a 20 -->
+                <svg width="80" height="70" viewBox="0 0 100 100" class="mx-auto">
+                    <circle id="led-red" cx="50" cy="35" r="30" fill="#dc2626" class="led-glow opacity-30" style="color: #dc2626;"></circle>
+                    <text x="50" y="80" text-anchor="middle" fill="#dc2626" font-size="20">ALERTA</text>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Sección Innovadora: Protocolo de Seguridad por IA --><div class="p-4 rounded-lg bg-red-800/20 border border-red-700/50">
+            <h2 class="text-xl font-semibold mb-3 text-red-300">
+                Protocolo de Seguridad (SALE FORT XD)
+            </h2>
+            <button id="safety-btn" onclick="requestSafetyProtocol()" 
+                    class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg transition duration-200 focus:outline-none focus:ring-4 focus:ring-red-500/50 disabled:bg-red-900 disabled:cursor-not-allowed">
+                Consultar Protocolo de Emergencia
+            </button>
+            
+            <div id="protocol-output" class="mt-4 p-3 text-sm rounded-lg bg-gray-900/50 border border-red-800 hidden">
+                <p id="protocol-text" class="text-red-200 italic"></p>
+                <div id="sources" class="mt-2 pt-2 border-t border-red-900 text-xs text-red-400"></div>
+            </div>
+            
+            <p id="loading-indicator" class="mt-4 text-center text-yellow-500 hidden">
+                <span class="animate-spin inline-block mr-2 text-2xl">⚡</span> Consultando a experto en seguridad...
+            </p>
+        </div>
+        
+    </div>
+
+    <script>
+        // --- Configuración e Inicialización de Firebase (OBLIGATORIO para el entorno) ---
+        // Aunque esta aplicación no usa Firestore, la configuración base es requerida.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // La API Key se deja vacía para que el entorno la inyecte automáticamente.
+        const API_KEY = "";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+        
+        // --- Elementos del DOM ---
+        const tempInput = document.getElementById('temp-input');
+        const currentTempSpan = document.getElementById('current-temp');
+        const tempStatusP = document.getElementById('temp-status');
+        const ledGreen = document.getElementById('led-green');
+        const ledRed = document.getElementById('led-red');
+        const safetyBtn = document.getElementById('safety-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const protocolOutput = document.getElementById('protocol-output');
+        const protocolText = document.getElementById('protocol-text');
+        const sourcesDiv = document.getElementById('sources');
+
+        // --- Lógica del Tablero de Control ---
+        const THRESHOLD_DANGER = 35; // Umbral de temperatura para cambiar de Normal a Alerta
+
+        /**
+         * Actualiza el display y el estado de los LEDs basado en la temperatura.
+         * @param {string} value - El valor de temperatura del slider.
+         */
+        function updateDashboard(value) {
+            const temp = parseFloat(value);
+            currentTempSpan.textContent = temp.toFixed(1);
+
+            if (temp <= THRESHOLD_DANGER) {
+                // Estado Normal
+                tempStatusP.textContent = "Estado: Normal (Temperatura Segura)";
+                tempStatusP.classList.remove('text-red-400');
+                tempStatusP.classList.add('text-green-400');
+                
+                // LEDs
+                ledGreen.classList.remove('opacity-30'); // Green ON
+                ledRed.classList.add('opacity-30');      // Red OFF
+                safetyBtn.disabled = false;
+                safetyBtn.textContent = "Consultar Protocolo de Seguridad (General)";
+
+            } else {
+                // Estado de Alerta
+                tempStatusP.textContent = "Estado: ¡ALERTA! Exceso de Calor";
+                tempStatusP.classList.remove('text-green-400');
+                tempStatusP.classList.add('text-red-400');
+                
+                // LEDs
+                ledGreen.classList.add('opacity-30');      // Green OFF
+                ledRed.classList.remove('opacity-30');   // Red ON (Brillante)
+                safetyBtn.disabled = false;
+                safetyBtn.textContent = "¡URGENTE! Consultar Protocolo de Emergencia";
+            }
+            
+            // Ocultar resultados de protocolo al cambiar la temperatura
+            protocolOutput.classList.add('hidden');
+        }
+
+        /**
+         * Llama a la API de Gemini para obtener un protocolo de seguridad
+         * basado en la temperatura actual (usando Grounding/Google Search).
+         */
+        async function requestSafetyProtocol() {
+            const currentTemp = currentTempSpan.textContent;
+            
+            safetyBtn.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+            protocolOutput.classList.add('hidden');
+            
+            const systemPrompt = "Actúa como un experto en seguridad industrial y de laboratorios. Proporciona un resumen de una sola frase sobre el protocolo de seguridad recomendado para la siguiente situación de temperatura. Responde en español.";
+            const userQuery = `Temperatura actual detectada: ${currentTemp} grados Celsius. ¿Cuál es el protocolo de seguridad o la recomendación inmediata?`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                tools: [{ "google_search": {} }], // Herramienta de Grounding para buscar información actual
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+            
+            let responseData = null;
+            let maxRetries = 3;
+            let delay = 1000;
+            
+            // Bucle de reintento con backoff exponencial
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        responseData = await response.json();
+                        break; // Éxito, salir del bucle
+                    } else if (response.status === 429 && i < maxRetries - 1) {
+                        // 429 Too Many Requests: Reintentar después de la pausa
+                        console.warn(`Retry ${i + 1}: API rate limit exceeded (429). Retrying in ${delay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Duplicar el retraso (backoff exponencial)
+                    } else {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                } catch (error) {
+                    console.error("Error fetching Gemini API:", error);
+                    if (i === maxRetries - 1) {
+                         // Lanzar el error si es el último reintento
+                         throw error;
+                    }
+                    // Esperar antes de reintentar si fue un error de red/servidor (no 429)
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+            }
+            
+            loadingIndicator.classList.add('hidden');
+            safetyBtn.disabled = false;
+            
+            if (responseData && responseData.candidates && responseData.candidates.length > 0) {
+                const candidate = responseData.candidates[0];
+                const text = candidate.content?.parts?.[0]?.text || "No se pudo obtener el protocolo.";
+                
+                protocolText.textContent = text;
+                protocolOutput.classList.remove('hidden');
+                
+                // Manejo de fuentes/citaciones (Grounding)
+                let sourcesHtml = 'Fuentes: ';
+                const groundingMetadata = candidate.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    const sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri,
+                            title: attribution.web?.title, 
+                        }))
+                        .filter(source => source.uri && source.title)
+                        .slice(0, 3); // Limitar a 3 fuentes
+                        
+                    if (sources.length > 0) {
+                        sourcesHtml += sources.map(s => 
+                            `<a href="${s.uri}" target="_blank" class="underline hover:text-red-300 transition">${s.title.substring(0, 40)}...</a>`
+                        ).join(' | ');
+                    } else {
+                        sourcesHtml += 'No se proporcionaron fuentes específicas.';
+                    }
+                } else {
+                    sourcesHtml += 'No se proporcionaron fuentes específicas.';
+                }
+                sourcesDiv.innerHTML = sourcesHtml;
+                
+            } else {
+                protocolText.textContent = "Error al conectar con el consultor de seguridad IA. Por favor, inténtelo de nuevo.";
+                sourcesDiv.innerHTML = '';
+                protocolOutput.classList.remove('hidden');
+            }
+        }
+
+        // Inicializar el dashboard al cargar
+        window.onload = () => {
+             // Aplicar el estado inicial
+            updateDashboard(tempInput.value);
+            
+            // Limpiar la salida del protocolo al inicio
+            protocolOutput.classList.add('hidden');
+
+            // Mostrar un mensaje si la clave de autenticación no está disponible (solo para depuración)
+            if (!initialAuthToken) {
+                console.warn("Autenticación no inicializada: Usando modo anónimo. Algunas funciones pueden requerir autenticación completa.");
+            }
+        };
+
+    </script>
+</body>
+</html>
